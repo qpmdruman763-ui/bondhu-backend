@@ -1,56 +1,45 @@
-const express = require('express');
+import express from "express";
+import http from "http";
+import { Server } from "socket.io";
+import cors from "cors";
+
 const app = express();
-const http = require('http');
-const cors = require('cors');
-const { Server } = require('socket.io');
-
-// 1. Setup PORT for Cloud Hosting
-const PORT = process.env.PORT || 3001;
-
-// 2. Middleware
 app.use(cors());
-
-// 3. Health Check Routes
-app.get("/", (req, res) => {
-    res.send("Bondhu 2.0 Server is Running!");
-});
-
-app.get("/ping", (req, res) => {
-    res.status(200).send("pong");
-});
 
 const server = http.createServer(app);
 
-// 4. Socket.io Setup with FIXED CORS
 const io = new Server(server, {
-    cors: {
-        origin: [
-            "http://localhost:5173", 
-            "http://localhost:8080", 
-            "https://lovely-valkyrie-d8f395.netlify.app" // Clean link here
-        ], 
-        methods: ["GET", "POST"]
-    }
+  cors: { origin: "*" } // Allows connection from Netlify/Vercel/Everywhere
 });
 
 io.on("connection", (socket) => {
-    console.log(`User Connected: ${socket.id}`);
+  console.log("User connected:", socket.id);
 
-    socket.on("join_room", (data) => {
-        socket.join(data);
-        console.log(`User with ID: ${socket.id} joined room: ${data}`);
-    });
+  // --- THE ONLY ADDITION NEEDED ---
+  // When a user logs in, they join a "Room" named after their email.
+  socket.on("join_room", (email) => {
+    socket.join(email); 
+  });
 
-    socket.on("send_message", (data) => {
-        socket.to(data.room).emit("receive_message", data);
-    });
+  socket.on("message", (msg) => {
+    if (msg.target) {
+      // PROFESSIONAL: Send only to the person with that email
+      io.to(msg.target).emit("message", msg);
+    } else {
+      // PROTOTYPE STYLE: Global chat
+      io.emit("message", msg);
+    }
+  });
 
-    socket.on("disconnect", () => {
-        console.log("User Disconnected", socket.id);
-    });
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
 });
 
-// 5. Start Server
+app.get("/", (req, res) => { res.send("Backend is running"); });
+
+// RENDER/PRODUCTION PORT
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`SERVER RUNNING ON PORT ${PORT}`);
+  console.log("Server running on port", PORT);
 });

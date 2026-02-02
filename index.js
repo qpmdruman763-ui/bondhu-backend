@@ -4,13 +4,13 @@ const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
 
-// 1. Setup PORT for Cloud Hosting (very important)
+// 1. Setup PORT for Cloud Hosting
 const PORT = process.env.PORT || 3001;
 
 // 2. Middleware
 app.use(cors());
 
-// 3. Health Check Route (Used to keep the server awake)
+// 3. Health Check Routes
 app.get("/", (req, res) => {
     res.send("Bondhu 2.0 Server is Running!");
 });
@@ -21,11 +21,14 @@ app.get("/ping", (req, res) => {
 
 const server = http.createServer(app);
 
-// 4. Socket.io Setup with CORS
+// 4. Socket.io Setup with FIXED CORS
 const io = new Server(server, {
     cors: {
-        // Allow your local computer AND your future website URL
-        origin: ["http://localhost:5173", "http://localhost:8080", "*"], 
+        origin: [
+            "http://localhost:5173", 
+            "http://localhost:8080", 
+            "https://lovely-valkyrie-d8f395.netlify.app" // Clean link here
+        ], 
         methods: ["GET", "POST"]
     }
 });
@@ -33,13 +36,11 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
 
-    // Listen for users joining a chat room
     socket.on("join_room", (data) => {
         socket.join(data);
         console.log(`User with ID: ${socket.id} joined room: ${data}`);
     });
 
-    // Listen for messages and broadcast them
     socket.on("send_message", (data) => {
         socket.to(data.room).emit("receive_message", data);
     });

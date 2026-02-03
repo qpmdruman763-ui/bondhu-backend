@@ -1,56 +1,54 @@
-const express = require('express');
+import express from "express";
+import http from "http";
+import { Server } from "socket.io";
+import cors from "cors";
+
 const app = express();
-const http = require('http');
-const cors = require('cors');
-const { Server } = require('socket.io');
 
-// 1. Setup PORT for Cloud Hosting
-const PORT = process.env.PORT || 3001;
+// 1. Professional CORS: Allows your frontend to connect from ANY platform
+app.use(cors({
+    origin: true, 
+    credentials: true
+}));
 
-// 2. Middleware
-app.use(cors());
-
-// 3. Health Check Routes
-app.get("/", (req, res) => {
-    res.send("Bondhu 2.0 Server is Running!");
-});
-
-app.get("/ping", (req, res) => {
-    res.status(200).send("pong");
-});
+// 2. Wake-up Route: Essential to stop the "Connecting..." hang
+app.get("/ping", (req, res) => res.send("pong"));
+app.get("/", (req, res) => res.send("Server is Online"));
 
 const server = http.createServer(app);
 
-// 4. Socket.io Setup with FIXED CORS
 const io = new Server(server, {
-    cors: {
-        origin: [
-            "http://localhost:5173", 
-            "http://localhost:8080", 
-            "https://lovely-valkyrie-d8f395.netlify.app" // Clean link here
-        ], 
-        methods: ["GET", "POST"]
-    }
+  cors: {
+    origin: true,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
 io.on("connection", (socket) => {
-    console.log(`User Connected: ${socket.id}`);
+  // 3. MAILBOX SYSTEM: Solves the "User Finding" issue
+  socket.on("join_room", (email) => {
+    if(!email) return;
+    const cleanEmail = email.toLowerCase().trim();
+    socket.join(cleanEmail);
+    console.log(`Mailbox active for: ${cleanEmail}`);
+  });
 
-    socket.on("join_room", (data) => {
-        socket.join(data);
-        console.log(`User with ID: ${socket.id} joined room: ${data}`);
-    });
+  socket.on("message", (msg) => {
+    if (msg.target) {
+      // Direct delivery to the friend's email room
+      io.to(msg.target.toLowerCase().trim()).emit("message", msg);
+    } else {
+      // Global chat broadcast
+      io.emit("message", msg);
+    }
+  });
 
-    socket.on("send_message", (data) => {
-        socket.to(data.room).emit("receive_message", data);
-    });
-
-    socket.on("disconnect", () => {
-        console.log("User Disconnected", socket.id);
-    });
+  socket.on("disconnect", () => {});
 });
 
-// 5. Start Server
+// 4. Dynamic Port for Production
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`SERVER RUNNING ON PORT ${PORT}`);
+  console.log(`Professional Server running on port ${PORT}`);
 });

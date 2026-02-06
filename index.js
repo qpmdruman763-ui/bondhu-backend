@@ -2,6 +2,16 @@ import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
+import admin from "firebase-admin"; // 1. Added Firebase Admin
+import { createRequire } from "module"; // 2. Added to handle JSON import safely
+
+const require = createRequire(import.meta.url);
+const serviceAccount = require("./serviceAccount.json");
+
+// 3. Initialize Firebase Admin
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const app = express();
 
@@ -33,17 +43,36 @@ io.on("connection", (socket) => {
     console.log(`Mailbox active for: ${cleanEmail}`);
   });
 
-  // 2. TEXT MESSAGES
+  // 2. TEXT MESSAGES (Updated with Push Logic)
   socket.on("message", (msg) => {
     if (msg.target) {
       const target = msg.target.toLowerCase().trim();
       io.to(target).emit("message", msg);
+
+      // --- NEW: SEND PUSH NOTIFICATION IF TOKEN IS PROVIDED ---
+      // If the client sends 'receiverToken', the server will trigger Firebase
+      if (msg.receiverToken && msg.type === 'text') {
+          const pushPayload = {
+              notification: {
+                  title: `Message from ${msg.user || 'Bondhu'}`,
+                  body: msg.text.length > 100 ? msg.text.substring(0, 97) + "..." : msg.text
+              },
+              token: msg.receiverToken,
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } }
+          };
+
+          admin.messaging().send(pushPayload)
+              .then(() => console.log(`Push sent to: ${target}`))
+              .catch((error) => console.error("Error sending push:", error));
+      }
+
     } else {
       io.emit("message", msg);
     }
   });
 
-  // 3. REACTIONS (Added this based on your client code)
+  // 3. REACTIONS
   socket.on("message_reaction", (data) => {
     if(data.target) {
         io.to(data.target.toLowerCase().trim()).emit("message_reaction", data);
@@ -80,7 +109,7 @@ io.on("connection", (socket) => {
     io.to(target).emit("call_candidate", data.candidate);
   });
 
-  // --- NEW: END CALL SIGNAL ---
+  // --- END CALL SIGNAL ---
   socket.on("end_call", (data) => {
     if(data.to) {
         const target = data.to.toLowerCase().trim();

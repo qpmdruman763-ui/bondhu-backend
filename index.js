@@ -16,16 +16,27 @@ const logConnect = () => {
   if (n < 100 || n % 500 === 0) console.log("[Bondhu] Connections:", n);
 };
 
-// CORS: set CORS_ORIGIN to comma-separated origins in production (e.g. https://bondhu.site,https://www.bondhu.site)
-const corsOrigin = process.env.CORS_ORIGIN
+// CORS: set CORS_ORIGIN to comma-separated origins (e.g. https://bondhu.site).
+// localhost (any port) is always allowed so you can test Flutter web without changing env each time.
+const corsOriginList = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
-  : true;
+  : [];
+
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true;
+  } catch (_) {}
+  if (corsOriginList.length === 0) return true;
+  return corsOriginList.includes(origin);
+}
 
 const app = express();
 
 app.use(
   cors({
-    origin: corsOrigin,
+    origin: (origin, callback) => callback(null, isOriginAllowed(origin)),
     credentials: true,
   })
 );
@@ -41,7 +52,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: corsOrigin,
+    origin: (req, callback) => callback(null, isOriginAllowed(req.headers?.origin || "")),
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -156,6 +167,11 @@ io.on("connection", (socket) => {
   socket.on("end_call", (data) => {
     const target = data?.to ? toRoom(data.to) : "";
     if (target) io.to(target).emit("end_call");
+  });
+
+  socket.on("call_history", (data) => {
+    const target = data?.to ? toRoom(data.to) : "";
+    if (target) io.to(target).emit("call_history", { from: data.from, type: data.type, durationFormatted: data.durationFormatted });
   });
 
   socket.on("call_declined", (data) => {

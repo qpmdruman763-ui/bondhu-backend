@@ -17,19 +17,23 @@ const logConnect = () => {
 };
 
 // CORS: set CORS_ORIGIN to comma-separated origins (e.g. https://bondhu.site).
-// localhost (any port) is always allowed so you can test Flutter web without changing env each time.
+// localhost and *.bondhu.site are always allowed so chat works from your site and Flutter web.
 const corsOriginList = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
   : [];
 
 function isOriginAllowed(origin) {
-  if (!origin) return false;
+  if (!origin || typeof origin !== "string") return corsOriginList.length === 0;
+  const o = origin.trim();
+  if (!o) return corsOriginList.length === 0;
   try {
-    const u = new URL(origin);
-    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true;
+    const u = new URL(o);
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host === "bondhu.site" || host.endsWith(".bondhu.site")) return true;
   } catch (_) {}
   if (corsOriginList.length === 0) return true;
-  return corsOriginList.includes(origin);
+  return corsOriginList.includes(o);
 }
 
 const app = express();

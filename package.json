@@ -16,7 +16,6 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "ioredis": "^5.4.1",
-    "node-appwrite": "^22.0.0",
     "nodemon": "^3.1.11",
     "socket.io": "^4.8.3"
   },

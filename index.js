@@ -16,31 +16,16 @@ const logConnect = () => {
   if (n < 100 || n % 500 === 0) console.log("[Bondhu] Connections:", n);
 };
 
-// CORS: set CORS_ORIGIN to comma-separated origins (e.g. https://bondhu.site).
-// localhost and *.bondhu.site are always allowed so chat works from your site and Flutter web.
-const corsOriginList = process.env.CORS_ORIGIN
+// CORS: set CORS_ORIGIN to comma-separated origins in production (e.g. https://bondhu.site,https://www.bondhu.site)
+const corsOrigin = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
-  : [];
-
-function isOriginAllowed(origin) {
-  if (!origin || typeof origin !== "string") return corsOriginList.length === 0;
-  const o = origin.trim();
-  if (!o) return corsOriginList.length === 0;
-  try {
-    const u = new URL(o);
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1") return true;
-    if (host === "bondhu.site" || host.endsWith(".bondhu.site")) return true;
-  } catch (_) {}
-  if (corsOriginList.length === 0) return true;
-  return corsOriginList.includes(o);
-}
+  : true;
 
 const app = express();
 
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, isOriginAllowed(origin)),
+    origin: corsOrigin,
     credentials: true,
   })
 );
@@ -56,7 +41,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: (req, callback) => callback(null, isOriginAllowed(req.headers?.origin || "")),
+    origin: corsOrigin,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -80,18 +65,6 @@ if (REDIS_URL) {
 
 // Normalize room key (email or group name)
 const toRoom = (v) => (v && typeof v === "string" ? v.toLowerCase().trim() : "");
-
-// Server-side dedupe: forward each private message only once per target (stops duplicate delivery)
-const recentPrivateForwards = new Map();
-const DEDUPE_WINDOW_MS = 120 * 1000;
-const MAX_DEDUPE_KEYS = 20000;
-const prunePrivateDedupe = () => {
-  if (recentPrivateForwards.size <= MAX_DEDUPE_KEYS) return;
-  const cutoff = Date.now() - DEDUPE_WINDOW_MS;
-  for (const [k, t] of recentPrivateForwards.entries()) {
-    if (t < cutoff) recentPrivateForwards.delete(k);
-  }
-};
 
 io.on("connection", (socket) => {
   log("User connected:", socket.id);
@@ -120,13 +93,6 @@ io.on("connection", (socket) => {
     }
     const target = toRoom(data?.targetId);
     if (!target) return;
-    const msgId = data?.id != null ? String(data.id) : `${data?.timestamp || ""}-${data?.senderId || ""}`;
-    const dedupeKey = `${msgId}:${target}`;
-    const now = Date.now();
-    const last = recentPrivateForwards.get(dedupeKey);
-    if (last != null && now - last < DEDUPE_WINDOW_MS) return;
-    recentPrivateForwards.set(dedupeKey, now);
-    prunePrivateDedupe();
     io.to(target).emit("private_message", data);
   });
 
@@ -171,11 +137,6 @@ io.on("connection", (socket) => {
   socket.on("end_call", (data) => {
     const target = data?.to ? toRoom(data.to) : "";
     if (target) io.to(target).emit("end_call");
-  });
-
-  socket.on("call_history", (data) => {
-    const target = data?.to ? toRoom(data.to) : "";
-    if (target) io.to(target).emit("call_history", { from: data.from, type: data.type, durationFormatted: data.durationFormatted });
   });
 
   socket.on("call_declined", (data) => {

@@ -96,6 +96,7 @@ io.on("connection", (socket) => {
     if (email && token) {
       registerFcmToken(email, token);
       log("FCM token registered for:", email);
+      console.log("[Bondhu] FCM token registered for:", email);
     }
   });
 

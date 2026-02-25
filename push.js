@@ -17,6 +17,9 @@ try {
 } catch (err) {
   console.warn("[Bondhu] FCM not configured:", err.message);
 }
+if (admin) {
+  console.log("[Bondhu] FCM initialized (push notifications enabled)");
+}
 
 const fcmTokens = new Map(); // email (lowercase) -> FCM token
 
@@ -32,8 +35,10 @@ export function getFcmToken(email) {
 }
 
 export async function sendPushToUser(targetEmail, { title, body, chatId }) {
+  console.log("[Bondhu] sendPushToUser", { targetEmail, adminOk: !!admin });
   if (!admin) return;
   const token = getFcmToken(targetEmail);
+  console.log("[Bondhu] FCM token for recipient", targetEmail, token ? "found" : "missing");
   if (!token) return;
   try {
     await admin.messaging().send({
@@ -43,6 +48,7 @@ export async function sendPushToUser(targetEmail, { title, body, chatId }) {
       android: { priority: "high", notification: { channelId: "bondhu_chat" } },
       apns: { payload: { aps: { sound: "default" } } },
     });
+    console.log("[Bondhu] FCM send OK for", targetEmail);
   } catch (err) {
     if (err.code === "messaging/invalid-registration-token" || err.code === "messaging/registration-token-not-registered") {
       fcmTokens.delete(String(targetEmail).toLowerCase().trim());

@@ -5,6 +5,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import Redis from "ioredis";
 import { isAllowed, cleanup as rateLimitCleanup } from "./rateLimiter.js";
+import { registerFcmToken, sendPushToUser } from "./push.js";
 
 const isProd = process.env.NODE_ENV === "production";
 const log = (...args) => {
@@ -66,6 +67,18 @@ if (REDIS_URL) {
 // Normalize room key (email or group name)
 const toRoom = (v) => (v && typeof v === "string" ? v.toLowerCase().trim() : "");
 
+// Server-side dedupe: forward each private message only once per target (stops duplicate delivery)
+const recentPrivateForwards = new Map();
+const DEDUPE_WINDOW_MS = 120 * 1000;
+const MAX_DEDUPE_KEYS = 20000;
+const prunePrivateDedupe = () => {
+  if (recentPrivateForwards.size <= MAX_DEDUPE_KEYS) return;
+  const cutoff = Date.now() - DEDUPE_WINDOW_MS;
+  for (const [k, t] of recentPrivateForwards.entries()) {
+    if (t < cutoff) recentPrivateForwards.delete(k);
+  }
+};
+
 io.on("connection", (socket) => {
   log("User connected:", socket.id);
   logConnect();
@@ -75,6 +88,15 @@ io.on("connection", (socket) => {
     if (!room) return;
     socket.join(room);
     log("Mailbox active for:", room);
+  });
+
+  socket.on("register_fcm", (data) => {
+    const email = toRoom(data?.email);
+    const token = typeof data?.token === "string" ? data.token.trim() : "";
+    if (email && token) {
+      registerFcmToken(email, token);
+      log("FCM token registered for:", email);
+    }
   });
 
   // Global messages: only to clients in group_global (same design & behavior)
@@ -93,7 +115,22 @@ io.on("connection", (socket) => {
     }
     const target = toRoom(data?.targetId);
     if (!target) return;
+    const msgId = data?.id != null ? String(data.id) : `${data?.timestamp || ""}-${data?.senderId || ""}`;
+    const dedupeKey = `${msgId}:${target}`;
+    const now = Date.now();
+    const last = recentPrivateForwards.get(dedupeKey);
+    if (last != null && now - last < DEDUPE_WINDOW_MS) return;
+    recentPrivateForwards.set(dedupeKey, now);
+    prunePrivateDedupe();
     io.to(target).emit("private_message", data);
+    const senderId = toRoom(data?.senderId);
+    const text = typeof data?.text === "string" ? data.text : "";
+    const msgPreview = text.length > 80 ? text.slice(0, 77) + "..." : text;
+    sendPushToUser(target, {
+      title: senderId ? `Message from ${senderId.split("@")[0]}` : "New message",
+      body: msgPreview || "New chat message",
+      chatId: senderId || undefined,
+    }).catch(() => {});
   });
 
   socket.on("message_reaction", (data) => {
@@ -137,6 +174,11 @@ io.on("connection", (socket) => {
   socket.on("end_call", (data) => {
     const target = data?.to ? toRoom(data.to) : "";
     if (target) io.to(target).emit("end_call");
+  });
+
+  socket.on("call_history", (data) => {
+    const target = data?.to ? toRoom(data.to) : "";
+    if (target) io.to(target).emit("call_history", { from: data.from, type: data.type, durationFormatted: data.durationFormatted });
   });
 
   socket.on("call_declined", (data) => {

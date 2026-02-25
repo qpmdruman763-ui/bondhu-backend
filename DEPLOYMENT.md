@@ -6,7 +6,7 @@
 |----------------|----------|-------------|
 | `PORT`         | No       | Server port (default: 3000). Set on Render/Railway/etc. |
 | `NODE_ENV`     | No       | Set to `production` in production. Reduces log noise. |
-| `CORS_ORIGIN`  | No       | Comma-separated allowed origins (e.g. `https://bondhu.site,https://www.bondhu.site`). If unset, allows all origins. |
+| `CORS_ORIGIN`  | No       | Comma-separated allowed origins (e.g. `https://bondhu.site,https://www.bondhu.site`). **If unset, the server allows any origin** — so your app works on any localhost port (`http://localhost:50283`, etc.) and any domain without extra config. To support “any localhost or any domain”, leave `CORS_ORIGIN` unset (or delete it on Render). |
 | `REDIS_URL`    | No       | Redis connection URL. When set, enables multi-instance scaling. |
 
 ## Single instance (no Redis)

@@ -92,12 +92,15 @@ export async function sendPushToUser(targetEmail, { title, body, chatId, type, c
   if (chatId != null) data.chatId = String(chatId);
   if (type != null) data.type = String(type);
   if (callType != null) data.callType = String(callType);
+  const isCall = callType != null && String(callType).length > 0;
+  const androidChannelId = isCall ? "bondhu_incoming_call" : "bondhu_chat";
+  // notification block is required so the system shows the notification when the app is killed
   try {
     await admin.messaging().send({
       token,
       notification: { title: title || "New message", body: body || "" },
       data,
-      android: { priority: "high", notification: { channelId: "bondhu_chat" } },
+      android: { priority: "high", notification: { channelId: androidChannelId } },
       apns: { payload: { aps: { sound: "default" } } },
     });
     console.log("[Bondhu] FCM send OK for", targetEmail);

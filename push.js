@@ -76,7 +76,7 @@ async function getFcmTokenFromAppwrite(email) {
   return null;
 }
 
-export async function sendPushToUser(targetEmail, { title, body, chatId }) {
+export async function sendPushToUser(targetEmail, { title, body, chatId, type, callType }) {
   console.log("[Bondhu] sendPushToUser", { targetEmail, adminOk: !!admin });
   if (!admin) return;
   let token = getFcmToken(targetEmail);
@@ -88,11 +88,15 @@ export async function sendPushToUser(targetEmail, { title, body, chatId }) {
     console.log("[Bondhu] FCM token for recipient", targetEmail, "missing (memory and DB)");
     return;
   }
+  const data = {};
+  if (chatId != null) data.chatId = String(chatId);
+  if (type != null) data.type = String(type);
+  if (callType != null) data.callType = String(callType);
   try {
     await admin.messaging().send({
       token,
       notification: { title: title || "New message", body: body || "" },
-      data: chatId != null ? { chatId: String(chatId) } : {},
+      data,
       android: { priority: "high", notification: { channelId: "bondhu_chat" } },
       apns: { payload: { aps: { sound: "default" } } },
     });

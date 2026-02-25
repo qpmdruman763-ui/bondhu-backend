@@ -160,6 +160,17 @@ io.on("connection", (socket) => {
       encryptedOffer: data.encryptedOffer,
       type: data.type,
     });
+    const callType = (data.type === "video" ? "Video" : "Audio") + " call";
+    const fromObj = data.from && typeof data.from === "object" ? data.from : {};
+    const callerName = fromObj.name || fromObj.email?.split("@")[0] || "Someone";
+    const senderId = toRoom(fromObj.email);
+    sendPushToUser(target, {
+      title: "Incoming call",
+      body: `${callerName} is calling you (${callType})`,
+      chatId: senderId || undefined,
+      type: "call",
+      callType: data.type || "audio",
+    }).catch(() => {});
   });
 
   socket.on("call_accepted", (data) => {
